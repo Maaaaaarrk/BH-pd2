@@ -107,6 +107,8 @@ __declspec(dllexport) void __stdcall BHOnPropertyBuild(wchar_t* wOut, int nStat,
 #endif
 
 void ItemName_Interception();
+void GoldLabelItem_Interception();
+void GoldLabelName_Interception();
 void __fastcall GetProperties_Interception();
 void GetItemPropertyStringDamage_Interception();
 void GetItemPropertyString_Interception();
