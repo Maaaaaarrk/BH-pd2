@@ -107,6 +107,11 @@ std::map<int, int> weponSpeedToTblIndex = {
 UnitAny* Item::viewingUnit;
 
 Patch* itemNamePatch = new Patch(Call, D2CLIENT, { 0x92366, 0x96736 }, (int)ItemName_Interception, 6);
+// Gold piles: the ground label routine (D2CLIENT 0xBFEC0, 1.13c) builds "<amount> Gold" itself
+// and never calls GetItemName, so ItemName_Interception never sees them. These two patches keep
+// the gold unit when the gold branch starts and run ItemNamePatch on the finished label.
+Patch* goldLabelItemPatch = new Patch(Call, D2CLIENT, { 0xC001D }, (int)GoldLabelItem_Interception, 5);
+Patch* goldLabelNamePatch = new Patch(Call, D2CLIENT, { 0xC0096 }, (int)GoldLabelName_Interception, 7);
 //Patch* itemPropertiesPatch = new Patch(Jump, D2CLIENT, { 0x5612C, 0x2E3FC }, (int)GetProperties_Interception, 6);
 //Patch* itemPropertyStringDamagePatch = new Patch(Call, D2CLIENT, { 0x55D7B, 0x2E04B }, (int)GetItemPropertyStringDamage_Interception, 5);
 //Patch* itemPropertyStringPatch = new Patch(Call, D2CLIENT, { 0x55D9D, 0x2E06D }, (int)GetItemPropertyString_Interception, 5);
@@ -156,6 +161,8 @@ void Item::OnLoad() {
 	//itemPropertyStringPatch->Install();
 
 	itemNamePatch->Install();
+	goldLabelItemPatch->Install();
+	goldLabelNamePatch->Install();
 
 	DrawSettings();
 }
@@ -783,6 +790,8 @@ void Item::ChangeFilterLevels(int newLevel) {
 
 void Item::OnUnload() {
 	itemNamePatch->Remove();
+	goldLabelItemPatch->Remove();
+	goldLabelNamePatch->Remove();
 	//itemPropertiesPatch->Remove();
 	//itemPropertyStringDamagePatch->Remove();
 	//itemPropertyStringPatch->Remove();
@@ -3146,6 +3155,36 @@ void __declspec(naked) ItemName_Interception()
 		push[esp + 0x1bec]
 		call Item::ItemNamePatch
 		mov al, [ebp + 0x12a]
+		ret
+	}
+}
+
+static UnitAny* goldLabelItem = nullptr;
+
+// Replaces `push 0; push 0xE; push esi` (GetUnitStat(item, STAT_GOLD, 0)) at the start of the
+// gold branch; esi is the gold unit and is overwritten before the label is finished.
+void __declspec(naked) GoldLabelItem_Interception()
+{
+	__asm {
+		mov goldLabelItem, esi
+		pop eax
+		push 0
+		push 0xE
+		push esi
+		jmp eax
+	}
+}
+
+// Replaces `mov esi, [esp+0x238]` after the label is built in the 128-wchar buffer at
+// [esp+0x34] (+4 here for the return address).
+void __declspec(naked) GoldLabelName_Interception()
+{
+	__asm {
+		lea ecx, [esp + 0x38]
+		mov edx, goldLabelItem
+		push 128
+		call Item::ItemNamePatch
+		mov esi, [esp + 0x23c]
 		ret
 	}
 }
